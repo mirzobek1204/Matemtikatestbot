@@ -1,103 +1,139 @@
-import asyncio
+import logging
 import os
-from aiogram import Bot, Dispatcher, Router, F
-from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton
+import re
+import json
+from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
+from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
 
-# CONFIG
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-ADMIN_ID = int(os.getenv("ADMIN_ID"))
+# ===== LOGGING =====
+logging.basicConfig(level=logging.INFO)
 
-bot = Bot(token=BOT_TOKEN)
-dp = Dispatcher()
-router = Router()
+# ===== CONFIG =====
+ADMIN_ID = 6257157305
+TOKEN = os.getenv("BOT_TOKEN")
 
-# USER KEYBOARD
-main_menu = ReplyKeyboardMarkup(
-    keyboard=[
-        [KeyboardButton(text="📘 Matematika DTM")],
-        [KeyboardButton(text="📗 Milliy Sertifikat")],
-        [KeyboardButton(text="✅ Kalit tekshirish")],
-        [KeyboardButton(text="📞 Admin bilan bog'lanish")]
-    ],
-    resize_keyboard=True
-)
+# ===== DATABASE (simple json) =====
+db = {"answers": {}, "pdfs": {}, "categories": {}, "users": []}
 
-# ADMIN KEYBOARD
-admin_menu = ReplyKeyboardMarkup(
-    keyboard=[
-        [KeyboardButton(text="➕ Test qo'shish")],
-        [KeyboardButton(text="🔑 Kalit qo'shish")],
-        [KeyboardButton(text="📊 Statistika")]
-    ],
-    resize_keyboard=True
-)
+def save_data():
+    with open("data.json", "w") as f:
+        json.dump(db, f, indent=4)
 
-# ANSWER CHECK
-correct_answers = "abcdabcd"
+def load_data():
+    global db
+    if os.path.exists("data.json"):
+        with open("data.json", "r") as f:
+            db = json.load(f)
 
-def check_answers(user_answers):
-    correct = 0
-    for i in range(len(correct_answers)):
-        if i < len(user_answers) and user_answers[i] == correct_answers[i]:
-            correct += 1
-    return correct
+# ===== KEYBOARDS =====
+def main_keyboard(uid):
+    btns = [
+        [KeyboardButton("📊 NATIJA TEKSHIRISH")],
+        [KeyboardButton("👨‍💻 Adminga bog'lanish")]
+    ]
+    if uid == ADMIN_ID:
+        btns.append([KeyboardButton("➕ TEST QO'SHISH"), KeyboardButton("🔑 KALIT QO'SHISH")])
+    return ReplyKeyboardMarkup(btns, resize_keyboard=True)
 
-# START
-@router.message(F.text == "/start")
-async def start_handler(message: Message):
-    await message.answer("Xush kelibsiz!", reply_markup=main_menu)
+def back_keyboard():
+    return ReplyKeyboardMarkup([[KeyboardButton("🔙 MENU")]], resize_keyboard=True)
 
-# USER SECTIONS
-@router.message(F.text == "📘 Matematika DTM")
-async def dtm(message: Message):
-    await message.answer("DTM testlari hali yuklanmagan")
+# ===== START =====
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    uid = update.effective_user.id
+    if uid not in db["users"]:
+        db["users"].append(uid)
+        save_data()
+    await update.message.reply_text("👋 Xush kelibsiz!", reply_markup=main_keyboard(uid))
 
-@router.message(F.text == "📗 Milliy Sertifikat")
-async def cert(message: Message):
-    await message.answer("Milliy sertifikat testlari hali yo‘q")
+# ===== MAIN HANDLER =====
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = update.message.text
+    uid = update.effective_user.id
+    user_data = context.user_data
 
-@router.message(F.text == "✅ Kalit tekshirish")
-async def check_prompt(message: Message):
-    await message.answer("Javoblarni yubor (masalan: abcdabcd)")
+    if text == "🔙 MENU":
+        user_data.clear()
+        return await update.message.reply_text("🏠 Menu", reply_markup=main_keyboard(uid))
 
-@router.message(F.text == "📞 Admin bilan bog'lanish")
-async def contact(message: Message):
-    await message.answer("Admin: @username")
+    if text == "👨‍💻 Adminga bog'lanish":
+        return await update.message.reply_text("Admin: @miracle_1204")
 
-# ADMIN PANEL
-@router.message(F.text == "/admin")
-async def admin_panel(message: Message):
-    if message.from_user.id == ADMIN_ID:
-        await message.answer("Admin panel", reply_markup=admin_menu)
-    else:
-        await message.answer("Ruxsat yo‘q")
+    # ===== ADMIN =====
+    if uid == ADMIN_ID:
 
-@router.message(F.text == "📊 Statistika")
-async def stats(message: Message):
-    if message.from_user.id == ADMIN_ID:
-        await message.answer("Statistika: hali yo‘q")
+        if text == "➕ TEST QO'SHISH":
+            user_data['state'] = "test_id"
+            return await update.message.reply_text("Test ID yozing (M-01):")
 
-@router.message(F.text == "➕ Test qo'shish")
-async def add_test(message: Message):
-    if message.from_user.id == ADMIN_ID:
-        await message.answer("Test qo‘shish keyin yoziladi")
+        if user_data.get('state') == "test_id":
+            user_data['test_id'] = text.upper()
+            user_data['state'] = "pdf"
+            return await update.message.reply_text("PDF yuboring:")
 
-@router.message(F.text == "🔑 Kalit qo'shish")
-async def add_key(message: Message):
-    if message.from_user.id == ADMIN_ID:
-        await message.answer("Kalit qo‘shish keyin yoziladi")
+        if text == "🔑 KALIT QO'SHISH":
+            user_data['state'] = "key_id"
+            return await update.message.reply_text("Test ID yozing:")
 
-# ANSWER HANDLER (eng oxirida bo‘lishi shart!)
-@router.message()
-async def handle_answers(message: Message):
-    user_ans = message.text.lower()
-    result = check_answers(user_ans)
-    await message.answer(f"Natija: {result} ta to‘g‘ri")
+        if user_data.get('state') == "key_id":
+            user_data['key_id'] = text.upper()
+            user_data['state'] = "key_value"
+            return await update.message.reply_text("Kalitlarni yuboring (abcd...):")
 
-# RUN
-async def main():
-    dp.include_router(router)
-    await dp.start_polling(bot)
+        if user_data.get('state') == "key_value":
+            db["answers"][user_data["key_id"]] = re.sub(r'[^a-e]', '', text.lower())
+            save_data()
+            user_data.clear()
+            return await update.message.reply_text("✅ Kalit saqlandi", reply_markup=main_keyboard(uid))
 
+    # ===== RESULT CHECK =====
+    if text == "📊 NATIJA TEKSHIRISH":
+        user_data['state'] = "check_id"
+        return await update.message.reply_text("Test ID yozing:", reply_markup=back_keyboard())
+
+    if user_data.get('state') == "check_id":
+        tid = text.upper()
+        if tid not in db["answers"]:
+            return await update.message.reply_text("❌ Topilmadi")
+        user_data['check_id'] = tid
+        user_data['state'] = "check_ans"
+        return await update.message.reply_text("Javoblarni yuboring:")
+
+    if user_data.get('state') == "check_ans":
+        correct = db["answers"][user_data["check_id"]]
+        user_ans = re.sub(r'[^a-e]', '', text.lower())
+
+        score = sum(1 for i in range(len(correct)) if i < len(user_ans) and user_ans[i] == correct[i])
+
+        user_data.clear()
+        return await update.message.reply_text(f"📊 Natija: {score}/{len(correct)}", reply_markup=main_keyboard(uid))
+
+# ===== PDF HANDLE =====
+async def handle_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    uid = update.effective_user.id
+    user_data = context.user_data
+
+    if uid == ADMIN_ID and user_data.get('state') == "pdf":
+        tid = user_data['test_id']
+        file = await context.bot.get_file(update.message.document.file_id)
+
+        path = f"{tid}.pdf"
+        await file.download_to_drive(path)
+
+        db["pdfs"][tid] = path
+        save_data()
+
+        user_data.clear()
+        await update.message.reply_text("✅ Test yuklandi", reply_markup=main_keyboard(uid))
+
+# ===== RUN =====
 if __name__ == "__main__":
-    asyncio.run(main())
+    load_data()
+
+    app = ApplicationBuilder().token(TOKEN).build()
+
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    app.add_handler(MessageHandler(filters.Document.PDF, handle_pdf))
+
+    app.run_polling(drop_pending_updates=True)
