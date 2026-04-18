@@ -6,6 +6,7 @@ import asyncio
 from flask import Flask, request
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 logging.basicConfig(level=logging.INFO)
 
@@ -57,8 +58,12 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return await update.message.reply_text("Menyu:", reply_markup=main_keyboard(uid))
 
     if text == "👨‍💻 Admin":
+    keyboard = [[InlineKeyboardButton("📩 Bog'lanish", url="https://t.me/miracle_1204")]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
     return await update.message.reply_text(
-        "👨‍💻 Admin bilan bog'lanish uchun murojaat qiling: @miracle_1204"
+        "👨‍💻 Admin bilan bog'lanish uchun quyidagi tugmani bosing:",
+        reply_markup=reply_markup
     )
 
     # TESTLARNI KO'RSATISH
