@@ -4,9 +4,8 @@ import re
 import json
 import asyncio
 from flask import Flask, request
-from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
+from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 logging.basicConfig(level=logging.INFO)
 
@@ -15,7 +14,6 @@ ADMIN_ID = int(os.getenv("ADMIN_ID", 0))
 WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 
 app = Flask(__name__)
-# Application obyektini yaratish
 application = Application.builder().token(TOKEN).build()
 
 db = {"answers": {}, "pdfs": {}, "categories": {}, "users": []}
@@ -31,8 +29,10 @@ def load_data():
     global db
     if os.path.exists("data.json"):
         with open("data.json") as f:
-            try: db = json.load(f)
-            except: pass
+            try: 
+                db = json.load(f)
+            except: 
+                pass
 
 def main_keyboard(uid):
     btns = [[KeyboardButton("📘 Matematika DTM")], [KeyboardButton("📗 Matematika Milliy Sertifikat")],
@@ -57,21 +57,22 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_data.clear()
         return await update.message.reply_text("Menyu:", reply_markup=main_keyboard(uid))
 
+    # MANA SHU YERDA BO'SH JOYLAR TO'G'IRLANDI (Line 56+)
     if text == "👨‍💻 Admin":
-    keyboard = [[InlineKeyboardButton("📩 Bog'lanish", url="https://t.me/miracle_1204")]]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    return await update.message.reply_text(
-        "👨‍💻 Admin bilan bog'lanish uchun quyidagi tugmani bosing:",
-        reply_markup=reply_markup
-    )
+        keyboard = [[InlineKeyboardButton("📩 Bog'lanish", url="https://t.me/miracle_1204")]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        return await update.message.reply_text(
+            "👨‍💻 Admin bilan bog'lanish uchun quyidagi tugmani bosing:",
+            reply_markup=reply_markup
+        )
 
     # TESTLARNI KO'RSATISH
     menus = {"📘 Matematika DTM": "DTM", "📗 Matematika Milliy Sertifikat": "MILLIY"}
     if text in menus:
         cat = menus[text]
         tests = [t for t, c in db["categories"].items() if c == cat]
-        if not tests: return await update.message.reply_text("❌ Hozircha testlar yo‘q")
+        if not tests: 
+            return await update.message.reply_text("❌ Hozircha testlar yo‘q")
         btns = [[KeyboardButton(t)] for t in tests]
         btns.append([KeyboardButton("🔙 Orqaga")])
         user_data["state"] = "choose"
@@ -83,14 +84,14 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # NATIJA TEKSHIRISH
     if text == "📊 NATIJA TEKSHIRISH":
         user_data["state"] = "check"
-        return await update.message.reply_text("Test ID yozing test shu ID bo'yicha saqlanadi:", reply_markup=ReplyKeyboardMarkup([[KeyboardButton("🔙 Orqaga")]], resize_keyboard=True))
+        return await update.message.reply_text("Test ID yozing:", reply_markup=ReplyKeyboardMarkup([[KeyboardButton("🔙 Orqaga")]], resize_keyboard=True))
 
     if user_data.get("state") == "check":
         tid = text.upper()
         if tid in db["answers"]:
             user_data.update({"state": "ans", "tid": tid})
             return await update.message.reply_text("Javoblarni yuboring:")
-        return await update.message.reply_text("❌ Topilmadi")
+        return await update.message.reply_text("❌ Bunday ID dagi test topilmadi.")
 
     if user_data.get("state") == "ans":
         correct = db["answers"][user_data["tid"]]
@@ -135,12 +136,10 @@ def home(): return "OK"
 
 @app.route(f"/{TOKEN}", methods=["POST"])
 async def webhook():
-    # 'active' o'rniga 'running' tekshiruvi yoki to'g'ridan-to'g'ri initialize
     try:
         if not application.updater:
             await application.initialize()
             await application.start()
-        
         data = request.get_json(force=True)
         update = Update.de_json(data, application.bot)
         await application.process_update(update)
@@ -163,5 +162,5 @@ if __name__ == "__main__":
         loop.run_until_complete(setup())
     except:
         asyncio.run(setup())
-    
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
+    
