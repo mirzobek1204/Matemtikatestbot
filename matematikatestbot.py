@@ -57,14 +57,16 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return await update.message.reply_text("Menyu:", reply_markup=main_keyboard(uid))
 
     if text == "👨‍💻 Admin":
-        return await update.message.reply_text("@miracle_1204")
+    return await update.message.reply_text(
+        "👨‍💻 Admin bilan bog'lanish uchun murojaat qiling: @miracle_1204"
+    )
 
     # TESTLARNI KO'RSATISH
     menus = {"📘 Matematika DTM": "DTM", "📗 Matematika Milliy Sertifikat": "MILLIY"}
     if text in menus:
         cat = menus[text]
         tests = [t for t, c in db["categories"].items() if c == cat]
-        if not tests: return await update.message.reply_text("❌ Testlar yo‘q")
+        if not tests: return await update.message.reply_text("❌ Hozircha testlar yo‘q")
         btns = [[KeyboardButton(t)] for t in tests]
         btns.append([KeyboardButton("🔙 Orqaga")])
         user_data["state"] = "choose"
@@ -76,7 +78,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # NATIJA TEKSHIRISH
     if text == "📊 NATIJA TEKSHIRISH":
         user_data["state"] = "check"
-        return await update.message.reply_text("Test ID yozing:", reply_markup=ReplyKeyboardMarkup([[KeyboardButton("🔙 Orqaga")]], resize_keyboard=True))
+        return await update.message.reply_text("Test ID yozing test shu ID bo'yicha saqlanadi:", reply_markup=ReplyKeyboardMarkup([[KeyboardButton("🔙 Orqaga")]], resize_keyboard=True))
 
     if user_data.get("state") == "check":
         tid = text.upper()
