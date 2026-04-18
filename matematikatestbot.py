@@ -43,10 +43,29 @@ def main_keyboard(uid):
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
+    first_name = update.effective_user.first_name
+    
+    # Ma'lumotlarni saqlash
     if uid not in db["users"]:
         db["users"].append(uid)
         save_data()
-    await update.message.reply_text("Xush kelibsiz!", reply_markup=main_keyboard(uid))
+
+    # Chiroyli kutib olish matni
+    welcome_text = (
+        f"👋 **Assalomu alaykum, {first_name}!**\n\n"
+        "🤖 **Matematika Test Botiga xush kelibsiz!**\n\n"
+        "Ushbu bot orqali siz:\n"
+        "🔹 DTM va Milliy sertifikat testlarini yuklab olishingiz;\n"
+        "🔹 Test javoblarini yuborib, natijangizni bilishingiz;\n"
+        "🔹 Bilimingizni doimiy tekshirib borishingiz mumkin.\n\n"
+        "👇 **Boshlash uchun quyidagi menyudan foydalaning:**"
+    )
+
+    await update.message.reply_text(
+        text=welcome_text,
+        reply_markup=main_keyboard(uid),
+        parse_mode="Markdown" # Matndagi qalin yozuvlar ishlashi uchun
+    )
 
 async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
@@ -72,7 +91,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         cat = menus[text]
         tests = [t for t, c in db["categories"].items() if c == cat]
         if not tests: 
-            return await update.message.reply_text("❌ Hozircha testlar yo‘q")
+            return await update.message.reply_text("❌ Hozircha testlar mavjud emas keyinroq urinib ko'ring:")
         btns = [[KeyboardButton(t)] for t in tests]
         btns.append([KeyboardButton("🔙 Orqaga")])
         user_data["state"] = "choose"
