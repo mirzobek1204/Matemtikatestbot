@@ -10,7 +10,8 @@ from telegram.ext import Application, CommandHandler, MessageHandler, ContextTyp
 logging.basicConfig(level=logging.INFO)
 
 TOKEN = os.getenv("BOT_TOKEN")
-ADMIN_ID = int(os.getenv("ADMIN_ID"))
+# ADMIN_ID ni int turiga o'tkazishda xatolik bo'lmasligi uchun default 0
+ADMIN_ID = int(os.getenv("ADMIN_ID", 0))
 WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 
 app = Flask(__name__)
@@ -54,11 +55,9 @@ async def message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
     user_data = context.user_data
 
-    # ADMIN CONTACT
     if text == "👨‍💻 Admin":
         return await update.message.reply_text("@miracle_1204")
 
-    # ===== CATEGORY =====
     menus = {
         "📘 Matematika DTM": "DTM",
         "📗 Matematika Milliy Sertifikat": "MILLIY"
@@ -67,67 +66,54 @@ async def message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if text in menus:
         cat = menus[text]
         tests = [t for t, c in db["categories"].items() if c == cat]
-
         if not tests:
             return await update.message.reply_text("❌ Testlar yo‘q")
-
+        
         buttons = [[KeyboardButton(t)] for t in tests]
-        context.user_data["state"] = "choose"
+        user_data["state"] = "choose"
+        return await update.message.reply_text("📑 Testni tanlang:", reply_markup=ReplyKeyboardMarkup(buttons, resize_keyboard=True))
 
-        return await update.message.reply_text(
-            "📑 Testni tanlang:",
-            reply_markup=ReplyKeyboardMarkup(buttons, resize_keyboard=True)
-        )
-
-    # PDF yuborish
-    if context.user_data.get("state") == "choose":
+    # PDF yuborish (file_id orqali)
+    if user_data.get("state") == "choose":
         if text in db["pdfs"]:
-            path = db["pdfs"][text]
-            if os.path.exists(path):
-                with open(path, "rb") as f:
-                    await update.message.reply_document(f)
+            file_id = db["pdfs"][text]
+            return await update.message.reply_document(file_id)
 
     # ===== ADMIN =====
     if uid == ADMIN_ID:
-
         if text == "➕ TEST":
             user_data["state"] = "cat"
             return await update.message.reply_text("1-DTM\n2-MILLIY")
 
         if user_data.get("state") == "cat":
-            if text == "1":
-                user_data["cat"] = "DTM"
-            elif text == "2":
-                user_data["cat"] = "MILLIY"
-            else:
-                return
+            user_data["cat"] = "DTM" if text == "1" else "MILLIY"
             user_data["state"] = "id"
             return await update.message.reply_text("ID yoz (M-01):")
 
         if user_data.get("state") == "id":
             user_data["tid"] = text.upper()
             user_data["state"] = "pdf"
-            return await update.message.reply_text("PDF yubor")
+            return await update.message.reply_text("PDF yuboring")
 
         if text == "🔑 KALIT":
             user_data["state"] = "key_id"
-            return await update.message.reply_text("Test ID")
+            return await update.message.reply_text("Test ID yozing:")
 
         if user_data.get("state") == "key_id":
             user_data["kid"] = text.upper()
             user_data["state"] = "key_val"
-            return await update.message.reply_text("Kalit yubor")
+            return await update.message.reply_text("Kalitlarni yuboring:")
 
         if user_data.get("state") == "key_val":
             db["answers"][user_data["kid"]] = re.sub(r'[^a-e]', '', text.lower())
             save_data()
             user_data.clear()
-            return await update.message.reply_text("✅ Saqlandi")
+            return await update.message.reply_text("✅ Kalitlar saqlandi", reply_markup=keyboard(uid))
 
     # ===== RESULT =====
     if text == "📊 NATIJA TEKSHIRISH":
         user_data["state"] = "check"
-        return await update.message.reply_text("Test ID yoz")
+        return await update.message.reply_text("Test ID yozing:")
 
     if user_data.get("state") == "check":
         tid = text.upper()
@@ -135,54 +121,58 @@ async def message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return await update.message.reply_text("❌ Topilmadi")
         user_data["tid"] = tid
         user_data["state"] = "ans"
-        return await update.message.reply_text("Javob yubor")
+        return await update.message.reply_text("Javoblaringizni yuboring:")
 
     if user_data.get("state") == "ans":
         correct = db["answers"][user_data["tid"]]
-        user = re.sub(r'[^a-e]', '', text.lower())
-        score = sum(1 for i in range(len(correct)) if i < len(user) and user[i] == correct[i])
+        user_ans = re.sub(r'[^a-e]', '', text.lower())
+        score = sum(1 for i in range(min(len(correct), len(user_ans))) if user_ans[i] == correct[i])
         user_data.clear()
-        return await update.message.reply_text(f"📊 {score}/{len(correct)}")
+        return await update.message.reply_text(f"📊 Natija: {score}/{len(correct)}", reply_markup=keyboard(uid))
 
-# ===== PDF =====
-async def pdf(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# ===== PDF HANDLING (OPTIMIZED) =====
+async def pdf_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
     if uid == ADMIN_ID and context.user_data.get("state") == "pdf":
         tid = context.user_data["tid"]
         cat = context.user_data["cat"]
-
-        file = await context.bot.get_file(update.message.document.file_id)
-        path = f"{tid}.pdf"
-        await file.download_to_drive(path)
-
-        db["pdfs"][tid] = path
+        
+        # Faylni yuklab olmaymiz, faqat ID sini olamiz
+        file_id = update.message.document.file_id
+        db["pdfs"][tid] = file_id
         db["categories"][tid] = cat
         save_data()
 
         context.user_data.clear()
-        await update.message.reply_text("✅ Yuklandi")
+        await update.message.reply_text(f"✅ {tid} testi tizimga qo'shildi!", reply_markup=keyboard(uid))
 
-# ===== ROUTES =====
+# ===== WEBHOOK SETUP =====
 @app.route("/")
 def home():
-    return "LIVE"
+    return "Bot is running..."
 
 @app.route(f"/{TOKEN}", methods=["POST"])
 async def webhook():
-    data = request.get_json(force=True)
-    update = Update.de_json(data, application.bot)
-    await application.process_update(update)
-    return "ok"
+    if request.method == "POST":
+        data = request.get_json(force=True)
+        update = Update.de_json(data, application.bot)
+        await application.process_update(update)
+        return "ok"
 
-# ===== START =====
+# ===== APP START =====
+async def setup_webhook():
+    await application.bot.set_webhook(f"{WEBHOOK_URL}/{TOKEN}")
+
 if __name__ == "__main__":
     load_data()
-
-    asyncio.run(application.bot.set_webhook(f"{WEBHOOK_URL}/{TOKEN}"))
-
+    
     application.add_handler(CommandHandler("start", start))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message))
-    application.add_handler(MessageHandler(filters.Document.PDF, pdf))
+    application.add_handler(MessageHandler(filters.Document.PDF, pdf_handler))
+    
+    # Webhookni asinxron sozlash
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(setup_webhook())
 
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
