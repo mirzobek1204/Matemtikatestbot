@@ -39,18 +39,17 @@ def main_keyboard(uid):
             [KeyboardButton("📊 NATIJA TEKSHIRISH")], [KeyboardButton("👨‍💻 Admin")]]
     if uid == ADMIN_ID:
         btns.append([KeyboardButton("➕ TEST"), KeyboardButton("🔑 KALIT")])
+        btns.append([KeyboardButton("📈 STATISTIKA")])
     return ReplyKeyboardMarkup(btns, resize_keyboard=True)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
     first_name = update.effective_user.first_name
     
-    # Ma'lumotlarni saqlash
     if uid not in db["users"]:
         db["users"].append(uid)
         save_data()
 
-    # Chiroyli kutib olish matni
     welcome_text = (
         f"👋 **Assalomu alaykum, {first_name}!**\n\n"
         "🤖 **Matematika Test Botiga xush kelibsiz!**\n\n"
@@ -64,7 +63,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         text=welcome_text,
         reply_markup=main_keyboard(uid),
-        parse_mode="Markdown" # Matndagi qalin yozuvlar ishlashi uchun
+        parse_mode="Markdown"
     )
 
 async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -76,7 +75,6 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_data.clear()
         return await update.message.reply_text("Menyu:", reply_markup=main_keyboard(uid))
 
-    # MANA SHU YERDA BO'SH JOYLAR TO'G'IRLANDI (Line 56+)
     if text == "👨‍💻 Admin":
         keyboard = [[InlineKeyboardButton("📩 Bog'lanish", url="https://t.me/miracle_1204")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -85,7 +83,6 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=reply_markup
         )
 
-    # TESTLARNI KO'RSATISH
     menus = {"📘 Matematika DTM": "DTM", "📗 Matematika Milliy Sertifikat": "MILLIY"}
     if text in menus:
         cat = menus[text]
@@ -100,7 +97,6 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if user_data.get("state") == "choose" and text in db["pdfs"]:
         return await update.message.reply_document(db["pdfs"][text])
 
-    # NATIJA TEKSHIRISH
     if text == "📊 NATIJA TEKSHIRISH":
         user_data["state"] = "check"
         return await update.message.reply_text("Test ID yozing:", reply_markup=ReplyKeyboardMarkup([[KeyboardButton("🔙 Orqaga")]], resize_keyboard=True))
@@ -119,11 +115,23 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_data.clear()
         return await update.message.reply_text(f"Natija: {score}/{len(correct)}", reply_markup=main_keyboard(uid))
 
-    # ADMIN QISMI
     if uid == ADMIN_ID:
         if text == "➕ TEST":
             user_data["state"] = "cat"
             return await update.message.reply_text("1-DTM, 2-MILLIY")
+        
+        if text == "📈 STATISTIKA":
+            users_count = len(db.get("users", []))
+            tests_count = len(db.get("pdfs", {}))
+            keys_count = len(db.get("answers", {}))
+            stat_msg = (
+                "📊 **Bot Statistikasi:**\n\n"
+                f"👤 Foydalanuvchilar: {users_count} ta\n"
+                f"📂 Jami testlar: {tests_count} ta\n"
+                f"🔑 Kalitlar bazasi: {keys_count} ta\n"
+            )
+            return await update.message.reply_text(stat_msg, parse_mode="Markdown")
+
         if user_data.get("state") == "cat":
             user_data.update({"cat": ("DTM" if text=="1" else "MILLIY"), "state": "id"})
             return await update.message.reply_text("ID yozing:")
@@ -182,4 +190,3 @@ if __name__ == "__main__":
     except:
         asyncio.run(setup())
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
-    
