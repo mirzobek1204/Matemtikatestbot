@@ -152,6 +152,8 @@ def webhook():
         logging.error(f"Webhook error: {e}")
     return 'OK', 200
 
+# --- ASINXRON ISHGA TUSHIRISH (TUZATILGAN) ---
+
 async def setup():
     load_data()
     application.add_handler(CommandHandler("start", start))
@@ -161,12 +163,15 @@ async def setup():
     await application.initialize()
     await application.bot.set_webhook(url=f"{WEBHOOK_URL}/{TOKEN}")
     await application.start()
+    logging.info("Bot webhook bilan ishga tushdi")
 
 if __name__ == "__main__":
-    try:
-        asyncio.run(setup())
-    except:
-        loop = asyncio.get_event_loop()
-        loop.run_until_complete(setup())
+    # Render uchun portni aniqlaymiz
+    port = int(os.environ.get("PORT", 10000))
     
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
+    # Setup funksiyasini bitta loop ichida ishga tushiramiz
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(setup())
+    
+    # Flask serverni ishga tushiramiz (bu loopni ochiq ushlab turadi)
+    app.run(host="0.0.0.0", port=port)
