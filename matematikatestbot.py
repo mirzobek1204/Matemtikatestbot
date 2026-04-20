@@ -7,13 +7,17 @@ from flask import Flask, request
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
 
+# Logging sozlamalari
 logging.basicConfig(level=logging.INFO)
 
+# O'zgaruvchilarni olish
 TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = int(os.getenv("ADMIN_ID", 0))
-WEBHOOK_URL = os.getenv("WEBHOOK_URL")
+WEBHOOK_URL = os.getenv("WEBHOOK_URL") # Masalan: https://matemtikatestbot.onrender.com
 
 app = Flask(__name__)
+
+# Application obyektini yaratish
 application = Application.builder().token(TOKEN).build()
 
 db = {"answers": {}, "pdfs": {}, "categories": {}, "users": []}
@@ -158,35 +162,48 @@ async def pdf_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data.clear()
         await update.message.reply_text("✅ PDF saqlandi!", reply_markup=main_keyboard(ADMIN_ID))
 
+# --- WEB SERVER QISMI ---
+
 @app.route("/")
-def home(): return "OK"
+def home():
+    return "Bot is alive and running!"
 
 @app.route(f"/{TOKEN}", methods=["POST"])
 async def webhook():
-    try:
-        if not application.updater:
-            await application.initialize()
-            await application.start()
-        data = request.get_json(force=True)
-        update = Update.de_json(data, application.bot)
-        await application.process_update(update)
-    except Exception as e:
-        logging.error(f"Error: {e}")
-    return '', 200
+    if request.method == "POST":
+        try:
+            data = request.get_json(force=True)
+            update = Update.de_json(data, application.bot)
+            await application.process_update(update)
+        except Exception as e:
+            logging.error(f"Webhook error: {e}")
+    return 'OK', 200
 
 async def setup():
     load_data()
     application.add_handler(CommandHandler("start", start))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_handler))
     application.add_handler(MessageHandler(filters.Document.PDF, pdf_handler))
+    
     await application.initialize()
+    # Webhookni o'rnatish
     await application.bot.set_webhook(url=f"{WEBHOOK_URL}/{TOKEN}")
     await application.start()
+    logging.info("Webhook set and application started.")
 
 if __name__ == "__main__":
+    # Event loopni to'g'ri boshqarish
     try:
         loop = asyncio.get_event_loop()
-        loop.run_until_complete(setup())
-    except:
+        if loop.is_running():
+            # Agar loop ishlayotgan bo'lsa (ba'zi muhitlarda shunday bo'ladi)
+            asyncio.ensure_future(setup())
+        else:
+            loop.run_until_complete(setup())
+    except Exception as e:
+        logging.error(f"Setup error: {e}")
         asyncio.run(setup())
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
+
+    # Flask serverni ishga tushirish
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
