@@ -7,17 +7,14 @@ from flask import Flask, request
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
 
-# Logging sozlamalari
+# Logging
 logging.basicConfig(level=logging.INFO)
 
-# O'zgaruvchilarni olish
 TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = int(os.getenv("ADMIN_ID", 0))
-WEBHOOK_URL = os.getenv("WEBHOOK_URL") # Masalan: https://matemtikatestbot.onrender.com
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 
 app = Flask(__name__)
-
-# Application obyektini yaratish
 application = Application.builder().token(TOKEN).build()
 
 db = {"answers": {}, "pdfs": {}, "categories": {}, "users": []}
@@ -48,27 +45,11 @@ def main_keyboard(uid):
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
-    first_name = update.effective_user.first_name
-    
     if uid not in db["users"]:
         db["users"].append(uid)
         save_data()
-
-    welcome_text = (
-        f"👋 **Assalomu alaykum, {first_name}!**\n\n"
-        "🤖 **Matematika Test Botiga xush kelibsiz!**\n\n"
-        "Ushbu bot orqali siz:\n"
-        "🔹 DTM va Milliy sertifikat testlarini yuklab olishingiz;\n"
-        "🔹 Test javoblarini yuborib, natijangizni bilishingiz;\n"
-        "🔹 Bilimingizni doimiy tekshirib borishingiz mumkin.\n\n"
-        "👇 **Boshlash uchun quyidagi menyudan foydalaning:**"
-    )
-
-    await update.message.reply_text(
-        text=welcome_text,
-        reply_markup=main_keyboard(uid),
-        parse_mode="Markdown"
-    )
+    welcome_text = "👋 Assalomu alaykum! Matematika Test Botiga xush kelibsiz!"
+    await update.message.reply_text(welcome_text, reply_markup=main_keyboard(uid))
 
 async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
@@ -81,36 +62,32 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if text == "👨‍💻 Admin":
         keyboard = [[InlineKeyboardButton("📩 Bog'lanish", url="https://t.me/miracle_1204")]]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        return await update.message.reply_text(
-            "👨‍💻 Admin bilan bog'lanish uchun quyidagi tugmani bosing:",
-            reply_markup=reply_markup
-        )
+        return await update.message.reply_text("Admin bilan bog'lanish:", reply_markup=InlineKeyboardMarkup(keyboard))
 
+    # DTM/MILLIY menyular
     menus = {"📘 Matematika DTM": "DTM", "📗 Matematika Milliy Sertifikat": "MILLIY"}
     if text in menus:
         cat = menus[text]
         tests = [t for t, c in db["categories"].items() if c == cat]
-        if not tests: 
-            return await update.message.reply_text("❌ Hozircha testlar mavjud emas keyinroq urinib ko'ring:")
-        btns = [[KeyboardButton(t)] for t in tests]
-        btns.append([KeyboardButton("🔙 Orqaga")])
+        if not tests: return await update.message.reply_text("❌ Testlar topilmadi.")
+        btns = [[KeyboardButton(t)] for t in tests] + [[KeyboardButton("🔙 Orqaga")]]
         user_data["state"] = "choose"
         return await update.message.reply_text("Tanlang:", reply_markup=ReplyKeyboardMarkup(btns, resize_keyboard=True))
 
     if user_data.get("state") == "choose" and text in db["pdfs"]:
         return await update.message.reply_document(db["pdfs"][text])
 
+    # Natija tekshirish
     if text == "📊 NATIJA TEKSHIRISH":
         user_data["state"] = "check"
-        return await update.message.reply_text("Test ID yozing:", reply_markup=ReplyKeyboardMarkup([[KeyboardButton("🔙 Orqaga")]], resize_keyboard=True))
+        return await update.message.reply_text("Test ID yozing:")
 
     if user_data.get("state") == "check":
         tid = text.upper()
         if tid in db["answers"]:
             user_data.update({"state": "ans", "tid": tid})
-            return await update.message.reply_text("Javoblarni yuboring:")
-        return await update.message.reply_text("❌ Bunday ID dagi test topilmadi.")
+            return await update.message.reply_text("Javoblarni yuboring (masalan: abcd...):")
+        return await update.message.reply_text("❌ Bunday ID topilmadi.")
 
     if user_data.get("state") == "ans":
         correct = db["answers"][user_data["tid"]]
@@ -119,22 +96,17 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_data.clear()
         return await update.message.reply_text(f"Natija: {score}/{len(correct)}", reply_markup=main_keyboard(uid))
 
+    # Admin funksiyalari
     if uid == ADMIN_ID:
         if text == "➕ TEST":
             user_data["state"] = "cat"
             return await update.message.reply_text("1-DTM, 2-MILLIY")
-        
+        if text == "🔑 KALIT":
+            user_data["state"] = "key_id"
+            return await update.message.reply_text("Test ID:")
         if text == "📈 STATISTIKA":
-            users_count = len(db.get("users", []))
-            tests_count = len(db.get("pdfs", {}))
-            keys_count = len(db.get("answers", {}))
-            stat_msg = (
-                "📊 **Bot Statistikasi:**\n\n"
-                f"👤 Foydalanuvchilar: {users_count} ta\n"
-                f"📂 Jami testlar: {tests_count} ta\n"
-                f"🔑 Kalitlar bazasi: {keys_count} ta\n"
-            )
-            return await update.message.reply_text(stat_msg, parse_mode="Markdown")
+            msg = f"👤 Foydalanuvchilar: {len(db['users'])}\n📂 Testlar: {len(db['pdfs'])}"
+            return await update.message.reply_text(msg)
 
         if user_data.get("state") == "cat":
             user_data.update({"cat": ("DTM" if text=="1" else "MILLIY"), "state": "id"})
@@ -142,9 +114,6 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if user_data.get("state") == "id":
             user_data.update({"tid": text.upper(), "state": "pdf"})
             return await update.message.reply_text("PDF yuboring:")
-        if text == "🔑 KALIT":
-            user_data["state"] = "key_id"
-            return await update.message.reply_text("Test ID:")
         if user_data.get("state") == "key_id":
             user_data.update({"kid": text.upper(), "state": "key_val"})
             return await update.message.reply_text("Kalitlarni yozing:")
@@ -152,7 +121,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             db["answers"][user_data["kid"]] = re.sub(r'[^a-e]', '', text.lower())
             save_data()
             user_data.clear()
-            return await update.message.reply_text("✅ Saqlandi", reply_markup=main_keyboard(uid))
+            return await update.message.reply_text("✅ Kalit saqlandi!", reply_markup=main_keyboard(uid))
 
 async def pdf_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id == ADMIN_ID and context.user_data.get("state") == "pdf":
@@ -162,21 +131,25 @@ async def pdf_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data.clear()
         await update.message.reply_text("✅ PDF saqlandi!", reply_markup=main_keyboard(ADMIN_ID))
 
-# --- WEB SERVER QISMI ---
+# --- WEBHOOK VA FLASK QISMI (TUZATILGAN) ---
 
 @app.route("/")
 def home():
-    return "Bot is alive and running!"
+    return "Bot is active!"
 
 @app.route(f"/{TOKEN}", methods=["POST"])
-async def webhook():
-    if request.method == "POST":
-        try:
-            data = request.get_json(force=True)
-            update = Update.de_json(data, application.bot)
-            await application.process_update(update)
-        except Exception as e:
-            logging.error(f"Webhook error: {e}")
+def webhook():
+    try:
+        data = request.get_json(force=True)
+        update = Update.de_json(data, application.bot)
+        
+        # Flask asinxron funksiyani ko'rishi uchun yangi loop ochamiz
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        loop.run_until_complete(application.process_update(update))
+        loop.close()
+    except Exception as e:
+        logging.error(f"Webhook error: {e}")
     return 'OK', 200
 
 async def setup():
@@ -186,24 +159,14 @@ async def setup():
     application.add_handler(MessageHandler(filters.Document.PDF, pdf_handler))
     
     await application.initialize()
-    # Webhookni o'rnatish
     await application.bot.set_webhook(url=f"{WEBHOOK_URL}/{TOKEN}")
     await application.start()
-    logging.info("Webhook set and application started.")
 
 if __name__ == "__main__":
-    # Event loopni to'g'ri boshqarish
     try:
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            # Agar loop ishlayotgan bo'lsa (ba'zi muhitlarda shunday bo'ladi)
-            asyncio.ensure_future(setup())
-        else:
-            loop.run_until_complete(setup())
-    except Exception as e:
-        logging.error(f"Setup error: {e}")
         asyncio.run(setup())
-
-    # Flask serverni ishga tushirish
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port)
+    except:
+        loop = asyncio.get_event_loop()
+        loop.run_until_complete(setup())
+    
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
