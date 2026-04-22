@@ -4,49 +4,78 @@ import re
 import json
 import asyncio
 from flask import Flask, request
-from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters
+from telegram import (
+    Update,
+    ReplyKeyboardMarkup,
+    KeyboardButton,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+)
+from telegram.ext import (
+    Application,
+    CommandHandler,
+    MessageHandler,
+    CallbackQueryHandler,
+    ContextTypes,
+    filters,
+)
 
 # Logging
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
+logging.basicConfig(level=logging.INFO)
 
-# Muhit o'zgaruvchilari
 TOKEN = os.getenv("BOT_TOKEN")
 WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 ADMIN_ID = int(os.getenv("ADMIN_ID", 0))
 
-# Flask va Telegram Application
+# Flask ilovasi
 app = Flask(__name__)
 application = Application.builder().token(TOKEN).build()
 
-db = {"answers": {}, "pdfs": {}, "categories": {}, "users": []}
+db = {
+    "answers": {},
+    "pdfs": {},
+    "categories": {},
+    "users": []
+}
 
+# ================= DB =================
 def load_data():
     global db
     if os.path.exists("data.json"):
-        try:
-            with open("data.json", "r") as f:
+        with open("data.json") as f:
+            try:
                 db = json.load(f)
-        except: pass
+            except:
+                pass
 
 def save_data():
-    try:
-        with open("data.json", "w") as f:
-            json.dump(db, f)
-    except: pass
+    with open("data.json", "w") as f:
+        json.dump(db, f)
 
+# ================= UI =================
 def main_keyboard(uid):
-    btns = [[KeyboardButton("📚 Testlar")], [KeyboardButton("📊 Natijam")], [KeyboardButton("ℹ️ Yordam")]]
-    if uid == ADMIN_ID: btns.append([KeyboardButton("⚙️ Admin Panel")])
+    btns = [
+        [KeyboardButton("📚 Testlar")],
+        [KeyboardButton("📊 Natijam"), KeyboardButton("👤 Profil")],
+        [KeyboardButton("ℹ️ Yordam")],
+    ]
+    if uid == ADMIN_ID:
+        btns.append([KeyboardButton("⚙️ Admin Panel")])
     return ReplyKeyboardMarkup(btns, resize_keyboard=True)
 
+# ================= START =================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
+    name = update.effective_user.first_name
     if uid not in db["users"]:
         db["users"].append(uid)
         save_data()
-    await update.message.reply_text(f"👋 Salom! Test botiga xush kelibsiz.", reply_markup=main_keyboard(uid))
+    await update.message.reply_text(
+        f"👋 Salom {name}\n\n📚 Test bot ishlayapti.",
+        reply_markup=main_keyboard(uid)
+    )
 
+# ================= MAIN =================
 async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
     uid = update.effective_user.id
@@ -57,34 +86,50 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return await update.message.reply_text("Menyu", reply_markup=main_keyboard(uid))
 
     if text == "📚 Testlar":
-        btns = [[KeyboardButton("🎓 DTM"), KeyboardButton("📜 MILLIY")], [KeyboardButton("🔙 Orqaga")]]
-        return await update.message.reply_text("Kategoriyani tanlang:", reply_markup=ReplyKeyboardMarkup(btns, resize_keyboard=True))
+        btns = [
+            [KeyboardButton("🎓 DTM"), KeyboardButton("📜 Matematika Milliy Sertifikati")],
+            [KeyboardButton("🔙 Orqaga")]
+        ]
+        return await update.message.reply_text(
+            "📚 Testlar:",
+            reply_markup=ReplyKeyboardMarkup(btns, resize_keyboard=True)
+        )
 
-    if text in ["🎓 DTM", "📜 MILLIY"]:
-        cat = "DTM" if "DTM" in text else "MILLIY"
+    menus = {"🎓 DTM": "DTM", "📜 Matematika Milliy Sertifikati": "MILLIY"}
+    if text in menus:
+        cat = menus[text]
         tests = [t for t, c in db["categories"].items() if c == cat]
-        if not tests: return await update.message.reply_text("❌ Testlar yo'q")
+        if not tests:
+            return await update.message.reply_text("❌ Test yo‘q")
         keyboard = [[InlineKeyboardButton(t, callback_data=f"test_{t}")] for t in tests]
-        return await update.message.reply_text("Testni tanlang:", reply_markup=InlineKeyboardMarkup(keyboard))
+        return await update.message.reply_text(
+            "📘 Test tanlang:",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
 
     if text == "📊 Natijam":
         data["state"] = "check"
-        return await update.message.reply_text("Test ID sini kiriting:")
+        return await update.message.reply_text("Test ID kiriting:")
 
     if data.get("state") == "check":
         tid = text.upper()
         if tid in db["answers"]:
-            data.update({"state": "ans", "tid": tid})
-            return await update.message.reply_text("Javoblarni yuboring (masalan: abcd...):")
-        return await update.message.reply_text("❌ ID topilmadi.")
+            data["state"] = "ans"; data["tid"] = tid
+            return await update.message.reply_text("🧠 Javoblarni yuboring:")
+        return await update.message.reply_text("❌ Topilmadi")
 
     if data.get("state") == "ans":
         correct = db["answers"][data["tid"]]
         user_ans = re.sub(r"[^a-e]", "", text.lower())
         score = sum(1 for i in range(min(len(correct), len(user_ans))) if user_ans[i] == correct[i])
+        percent = int((score / len(correct)) * 100) if correct else 0
         data.clear()
-        return await update.message.reply_text(f"✅ Natija: {score}/{len(correct)}", reply_markup=main_keyboard(uid))
+        return await update.message.reply_text(
+            f"📊 NATIJA\n\n✅ To‘g‘ri: {score}\n❌ Xato: {len(correct)-score}\n📈 Foiz: {percent}%",
+            reply_markup=main_keyboard(uid)
+        )
 
+# ================= CALLBACK/PDF =================
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -92,42 +137,43 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if tid in db["pdfs"]:
         await query.message.reply_document(db["pdfs"][tid])
 
-# ================= WEBHOOK (MUHIM QISM) =================
+async def pdf_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id == ADMIN_ID and context.user_data.get("state") == "pdf":
+        tid = context.user_data["tid"]
+        db["pdfs"][tid] = update.message.document.file_id
+        db["categories"][tid] = context.user_data["cat"]
+        save_data()
+        context.user_data.clear()
+        await update.message.reply_text("✅ Saqlandi")
+
+# ================= RENDER WEBHOOK LOGIC =================
 @app.route(f"/{TOKEN}", methods=["POST"])
 async def webhook():
     if request.method == "POST":
-        # Bot hali ishga tushmagan bo'lsa, uni uyg'otamiz
         if not application.updater:
             await application.initialize()
             await application.start()
-        
         update = Update.de_json(request.get_json(force=True), application.bot)
         await application.process_update(update)
         return "OK", 200
 
 @app.route("/")
-def index(): return "Bot is alive!", 200
+def index(): return "Bot is running", 200
 
-async def setup_bot():
+async def setup():
     load_data()
     application.add_handler(CommandHandler("start", start))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_handler))
+    application.add_handler(MessageHandler(filters.Document.PDF, pdf_handler))
     application.add_handler(CallbackQueryHandler(button_handler))
-    
-    # Webhookni bir marta o'rnatish
     await application.bot.set_webhook(url=f"{WEBHOOK_URL}/{TOKEN}")
-    logging.info(f"Webhook set to: {WEBHOOK_URL}/{TOKEN}")
 
 if __name__ == "__main__":
-    # Avval botni sozlaymiz
     try:
         loop = asyncio.get_event_loop()
     except RuntimeError:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
-    
-    loop.run_until_complete(setup_bot())
-    
-    # Keyin Flaskni yoqamiz
+    loop.run_until_complete(setup())
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
