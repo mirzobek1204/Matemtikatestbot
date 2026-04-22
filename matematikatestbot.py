@@ -168,19 +168,17 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ================= WEBHOOK ROUTE =================
 @server.route(f"/{TOKEN}", methods=["POST"])
-def webhook():
+async def webhook(): # async qo'shdik
     if request.method == "POST":
+        # Bot hali tayyor bo'lmasa, initialize qilamiz
+        if not application.updater:
+            await application.initialize()
+            await application.start()
+            
         update = Update.de_json(request.get_json(force=True), application.bot)
-        # Asinxron ishlov berish uchun loop dan foydalanamiz
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        loop.run_until_complete(application.process_update(update))
+        await application.process_update(update)
         return "OK", 200
     return "Forbidden", 403
-
-@server.route("/")
-def index():
-    return "Bot is running...", 200
 
 # ================= INIT =================
 async def setup():
@@ -193,10 +191,11 @@ async def setup():
     await application.bot.set_webhook(url=f"{WEBHOOK_URL}/{TOKEN}")
 
 if __name__ == "__main__":
-    # Avval setupni ishga tushiramiz
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(setup())
+    # Setup funksiyasini faqat bazani yuklash va webhook o'rnatish uchun qoldiramiz
+    load_data()
     
-    # Render porti
+    # Webhookni botga ulab qo'yamiz (buni async qilish shart emas bu yerda)
+    # Lekin eng yaxshisi Flaskni oddiy ishga tushirib, birinchi request kelganda botni yoqish
+    
     port = int(os.environ.get("PORT", 8080))
     server.run(host="0.0.0.0", port=port)
