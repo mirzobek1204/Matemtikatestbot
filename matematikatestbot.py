@@ -2,11 +2,10 @@ import os
 import logging
 import re
 import json
-from threading import Thread
-import asyncio
 from flask import Flask, request
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters
+import asyncio
 
 logging.basicConfig(level=logging.INFO)
 
@@ -79,7 +78,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         btns = [[KeyboardButton("🎓 DTM"), KeyboardButton("📜 Milliy Sertifikat")],[KeyboardButton("🔙 Orqaga")]]
         return await update.message.reply_text(
             "━━━━━━━━━━━━━━━━━━━━━━━━━━\n📚 TEST TURLARI\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-            "🎓 DTM — Davlat Test Markazi\n📜 Milliy Sertifikat — Matematika\n\nQaysi bo'limdan test ishlaysiz?",
+            "🎓 DTM — Davlat Test Markazi\n📜 Milliy Sertifikat — Matematika\n\nQaysi bo'limdan?",
             reply_markup=ReplyKeyboardMarkup(btns, resize_keyboard=True))
 
     if text == "👤 Profil":
@@ -90,68 +89,62 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if text == "ℹ️ Yordam":
         return await update.message.reply_text(
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━\nℹ️ FOYDALANISH QO'LLANMASI\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-            "1️⃣ «📚 Testlar» bo'limiga kiring\n2️⃣ DTM yoki Milliy Sertifikat tanlang\n"
-            "3️⃣ Test variantini tanlang\n4️⃣ PDF ni yuklab oling va ishlang\n"
-            "5️⃣ «📊 Natijam» orqali tekshiring\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "📩 Muammo bo'lsa admin bilan bog'laning",
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━\nℹ️ QO'LLANMA\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            "1️⃣ Testlar bo'limiga kiring\n2️⃣ DTM yoki Milliy tanlang\n"
+            "3️⃣ Variantni tanlang\n4️⃣ PDF yuklab ishlang\n"
+            "5️⃣ Natijam orqali tekshiring",
             reply_markup=main_keyboard(uid))
 
     if text == "⚙️ Admin Panel" and uid == ADMIN_ID:
         btns = [[KeyboardButton("➕ Test qo'shish")],[KeyboardButton("📋 Testlar ro'yxati"), KeyboardButton("👥 Foydalanuvchilar")],[KeyboardButton("🔙 Orqaga")]]
-        return await update.message.reply_text("━━━━━━━━━━━━━━━━━━━━━━━━━━\n⚙️ ADMIN PANEL\n━━━━━━━━━━━━━━━━━━━━━━━━━━",
-            reply_markup=ReplyKeyboardMarkup(btns, resize_keyboard=True))
+        return await update.message.reply_text("⚙️ ADMIN PANEL", reply_markup=ReplyKeyboardMarkup(btns, resize_keyboard=True))
 
     if text == "👥 Foydalanuvchilar" and uid == ADMIN_ID:
-        return await update.message.reply_text(
-            f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n👥 FOYDALANUVCHILAR\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-            f"📊 Jami: {len(db['users'])} ta foydalanuvchi")
+        return await update.message.reply_text(f"👥 Jami: {len(db['users'])} ta foydalanuvchi")
 
     if text == "📋 Testlar ro'yxati" and uid == ADMIN_ID:
-        if not db["categories"]: return await update.message.reply_text("❌ Hozircha testlar mavjud emas.")
-        lst = "\n".join([f"  • {t} ({c})" for t, c in db["categories"].items()])
-        return await update.message.reply_text(f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n📋 TESTLAR\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n{lst}")
+        if not db["categories"]: return await update.message.reply_text("❌ Testlar yo'q")
+        lst = "\n".join([f"• {t} ({c})" for t, c in db["categories"].items()])
+        return await update.message.reply_text(f"📋 TESTLAR:\n\n{lst}")
 
     if text == "➕ Test qo'shish" and uid == ADMIN_ID:
         btns = [[KeyboardButton("🎓 DTM"), KeyboardButton("📜 MILLIY")],[KeyboardButton("🔙 Orqaga")]]
         data["state"] = "admin_cat"
-        return await update.message.reply_text("📂 Kategoriyani tanlang:", reply_markup=ReplyKeyboardMarkup(btns, resize_keyboard=True))
+        return await update.message.reply_text("📂 Kategoriya:", reply_markup=ReplyKeyboardMarkup(btns, resize_keyboard=True))
 
     if data.get("state") == "admin_cat" and uid == ADMIN_ID:
         cat_map = {"🎓 DTM": "DTM", "📜 MILLIY": "MILLIY"}
         if text in cat_map:
             data["cat"] = cat_map[text]; data["state"] = "admin_tid"
-            return await update.message.reply_text("📝 Test ID kiriting (masalan: MATH001):")
+            return await update.message.reply_text("📝 Test ID (masalan: MATH001):")
 
     if data.get("state") == "admin_tid" and uid == ADMIN_ID:
         data["tid"] = text.upper(); data["state"] = "admin_ans"
-        return await update.message.reply_text("🔑 Javoblar kalitini kiriting (masalan: abcdea):")
+        return await update.message.reply_text("🔑 Javoblar (masalan: abcdea):")
 
     if data.get("state") == "admin_ans" and uid == ADMIN_ID:
         answers = re.sub(r"[^a-e]", "", text.lower())
         data["answers"] = answers; data["state"] = "pdf"
-        return await update.message.reply_text(f"✅ Javoblar qabul qilindi: {answers}\n\n📎 PDF faylni yuboring:")
+        return await update.message.reply_text(f"✅ Javoblar: {answers}\n\n📎 PDF yuboring:")
 
     menus = {"🎓 DTM": "DTM", "📜 Milliy Sertifikat": "MILLIY"}
     if text in menus:
         cat = menus[text]
         tests = [t for t, c in db["categories"].items() if c == cat]
-        if not tests: return await update.message.reply_text("⚠️ Bu bo'limda hozircha testlar mavjud emas.\nTez orada qo'shiladi!")
+        if not tests: return await update.message.reply_text("⚠️ Hozircha testlar yo'q!")
         keyboard = [[InlineKeyboardButton(f"📘 {t}", callback_data=f"test_{t}")] for t in tests]
-        return await update.message.reply_text(
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━\n📘 TEST VARIANTLARI\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n\nVariantni tanlang:",
-            reply_markup=InlineKeyboardMarkup(keyboard))
+        return await update.message.reply_text("📘 Test tanlang:", reply_markup=InlineKeyboardMarkup(keyboard))
 
     if text == "📊 Natijam":
         data["state"] = "check"
-        return await update.message.reply_text("━━━━━━━━━━━━━━━━━━━━━━━━━━\n📊 NATIJA TEKSHIRISH\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n🔍 Test ID kiriting:")
+        return await update.message.reply_text("🔍 Test ID kiriting:")
 
     if data.get("state") == "check":
         tid = text.upper()
         if tid in db["answers"]:
             data["state"] = "ans"; data["tid"] = tid
-            return await update.message.reply_text(f"✅ Test topildi! ({len(db['answers'][tid])} savol)\n\n🖊 Javoblarni kiriting (masalan: abcdea):")
-        return await update.message.reply_text("❌ Topilmadi. To'g'ri ID kiriting:")
+            return await update.message.reply_text(f"✅ Topildi! ({len(db['answers'][tid])} savol)\n\n🖊 Javoblarni kiriting:")
+        return await update.message.reply_text("❌ Topilmadi. Qayta kiriting:")
 
     if data.get("state") == "ans":
         correct = db["answers"][data["tid"]]
@@ -159,15 +152,16 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         score = sum(1 for i in range(min(len(correct), len(user_ans))) if user_ans[i] == correct[i])
         total = len(correct)
         percent = int((score/total)*100) if total else 0
-        if percent >= 90: baho, tavsif = "A'lo ✨", "Mukammal natija! Siz zo'rsiz!"
+        if percent >= 90: baho, tavsif = "A'lo ✨", "Mukammal! Siz zo'rsiz!"
         elif percent >= 70: baho, tavsif = "Yaxshi 👍", "Yaxshi natija! Davom eting!"
-        elif percent >= 50: baho, tavsif = "Qoniqarli ⚠️", "Ko'proq mashq qilish zarur!"
+        elif percent >= 50: baho, tavsif = "Qoniqarli ⚠️", "Ko'proq mashq kerak!"
         else: baho, tavsif = "Qoniqarsiz ❌", "Ko'proq o'qish kerak!"
         data.clear()
         return await update.message.reply_text(
             f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n📊 NATIJA\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-            f"✅ To'g'ri: {score}/{total}\n❌ Xato:   {total-score}/{total}\n📈 Foiz:   {percent}%\n🏅 Baho:   {baho}\n\n"
-            f"💬 {tavsif}\n━━━━━━━━━━━━━━━━━━━━━━━━━━",
+            f"✅ To'g'ri: {score}/{total}\n❌ Xato: {total-score}/{total}\n"
+            f"📈 Foiz: {percent}%\n🏅 Baho: {baho}\n\n💬 {tavsif}\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━",
             reply_markup=main_keyboard(uid))
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -175,9 +169,9 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     tid = query.data.replace("test_", "")
     if tid in db["pdfs"]:
-        await query.message.reply_document(db["pdfs"][tid], caption=f"📘 {tid}\n\nIshlang va «📊 Natijam» orqali tekshiring!")
+        await query.message.reply_document(db["pdfs"][tid], caption=f"📘 {tid}\n\n«📊 Natijam» orqali tekshiring!")
     else:
-        await query.message.reply_text("❌ Fayl hali yuklanmagan.")
+        await query.message.reply_text("❌ Fayl yuklanmagan.")
 
 async def pdf_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID: return
@@ -188,33 +182,39 @@ async def pdf_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         db["categories"][tid] = context.user_data["cat"]
         save_data()
         context.user_data.clear()
-        await update.message.reply_text(f"✅ Test qo'shildi!\n\n🆔 ID: {tid}\n📂 Kategoriya: {db['categories'][tid]}", reply_markup=main_keyboard(ADMIN_ID))
+        await update.message.reply_text(f"✅ Qo'shildi!\n🆔 {tid}\n📂 {db['categories'][tid]}", reply_markup=main_keyboard(ADMIN_ID))
 
-loop = asyncio.new_event_loop()
-Thread(target=lambda: (asyncio.set_event_loop(loop), loop.run_forever()), daemon=True).start()
+async def setup_webhook(app):
+    await app.bot.set_webhook(url=f"{WEBHOOK_URL}/{TOKEN}")
 
-load_data()
-application = Application.builder().token(TOKEN).build()
-application.add_handler(CommandHandler("start", start))
-application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_handler))
-application.add_handler(MessageHandler(filters.Document.PDF, pdf_handler))
-application.add_handler(CallbackQueryHandler(button_handler))
+def create_app():
+    load_data()
+    ptb_app = Application.builder().token(TOKEN).build()
+    ptb_app.add_handler(CommandHandler("start", start))
+    ptb_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_handler))
+    ptb_app.add_handler(MessageHandler(filters.Document.PDF, pdf_handler))
+    ptb_app.add_handler(CallbackQueryHandler(button_handler))
 
-async def init_app():
-    await application.initialize()
-    await application.start()
-    await application.bot.set_webhook(url=f"{WEBHOOK_URL}/{TOKEN}")
+    async def process(update_data):
+        async with ptb_app:
+            await setup_webhook(ptb_app)
+            update = Update.de_json(update_data, ptb_app.bot)
+            await ptb_app.process_update(update)
 
-asyncio.run_coroutine_threadsafe(init_app(), loop).result(timeout=30)
+    flask_app.ptb_process = process
+    return flask_app
 
 @flask_app.route(f"/{TOKEN}", methods=["POST"])
 def webhook():
-    update = Update.de_json(request.get_json(force=True), application.bot)
-    asyncio.run_coroutine_threadsafe(application.process_update(update), loop).result(timeout=30)
+    update_data = request.get_json(force=True)
+    asyncio.run(flask_app.ptb_process(update_data))
     return "OK", 200
 
 @flask_app.route("/")
-def index(): return "✅ Matematika Test Bot ishlayapti!", 200
+def index():
+    return "✅ Matematika Test Bot ishlayapti!", 200
+
+create_app()
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
