@@ -196,26 +196,38 @@ def create_app():
     ptb_app.add_handler(CallbackQueryHandler(button_handler))
 
     async def process(update_data):
-        async with ptb_app:
-            await setup_webhook(ptb_app)
-            update = Update.de_json(update_data, ptb_app.bot)
-            await ptb_app.process_update(update)
+      # ... (tepadagi kodlar o'zgarishsiz qoladi)
 
-    flask_app.ptb_process = process
-    return flask_app
+# Application ob'ektini global yaratib olamiz
+ptb_app = Application.builder().token(TOKEN).build()
+
+async def init_bot():
+    """Botni bir marta initialize qilish"""
+    await ptb_app.initialize()
+    await ptb_app.bot.set_webhook(url=f"{WEBHOOK_URL}/{TOKEN}")
 
 @flask_app.route(f"/{TOKEN}", methods=["POST"])
 def webhook():
     update_data = request.get_json(force=True)
-    asyncio.run(flask_app.ptb_process(update_data))
+    # Loopni olish va update'ni asinxron ishlatish
+    loop = asyncio.get_event_loop()
+    update = Update.de_json(update_data, ptb_app.bot)
+    loop.create_task(ptb_app.process_update(update))
     return "OK", 200
 
 @flask_app.route("/")
 def index():
     return "✅ Matematika Test Bot ishlayapti!", 200
 
-create_app()
+# Handlerlarni qo'shish
+ptb_app.add_handler(CommandHandler("start", start))
+ptb_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_handler))
+ptb_app.add_handler(MessageHandler(filters.Document.PDF, pdf_handler))
+ptb_app.add_handler(CallbackQueryHandler(button_handler))
 
 if __name__ == "__main__":
+    # Botni ishga tushirish (Initialize)
+    asyncio.run(init_bot())
+    
     port = int(os.environ.get("PORT", 10000))
     flask_app.run(host="0.0.0.0", port=port)
