@@ -1,157 +1,83 @@
 import os
-import logging
-import re
-import json
 import asyncio
-from flask import Flask, request
-from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
-from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
+import logging
+import json
+import re
+from aiogram import Bot, Dispatcher, types, F
+from aiogram.filters import Command
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, Message
 
-# Logging sozlamalari
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
+# Logging
+logging.basicConfig(level=logging.INFO)
 
-# Muhit o'zgaruvchilari (Render Dashboard'da kiritilishi shart)
+# Tokenni olish
 TOKEN = os.getenv("BOT_TOKEN")
-WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 ADMIN_ID = int(os.getenv("ADMIN_ID", 0))
 
-flask_app = Flask(__name__)
+bot = Bot(token=TOKEN)
+dp = Dispatcher()
+
+# Ma'lumotlar bazasi (Sizning data.json)
 db = {"answers": {}, "pdfs": {}, "categories": {}, "users": []}
 
-# Ma'lumotlarni yuklash va saqlash
 def load_data():
     global db
     if os.path.exists("data.json"):
-        try:
-            with open("data.json", "r") as f:
-                db = json.load(f)
-        except: pass
+        with open("data.json", "r") as f:
+            try: db = json.load(f)
+            except: pass
 
 def save_data():
     with open("data.json", "w") as f:
         json.dump(db, f)
 
-# Klaviatura yaratish
+# Klaviaturani yaratish funksiyasi
 def main_keyboard(uid):
-    btns = [[KeyboardButton("📚 Testlar")], [KeyboardButton("📊 Natijam"), KeyboardButton("👤 Profil")], [KeyboardButton("ℹ️ Yordam")]]
-    if uid == ADMIN_ID: btns.append([KeyboardButton("⚙️ Admin Panel")])
-    return ReplyKeyboardMarkup(btns, resize_keyboard=True)
+    kb = [
+        [KeyboardButton(text="📚 Testlar")],
+        [KeyboardButton(text="📊 Natijam"), KeyboardButton(text="👤 Profil")],
+        [KeyboardButton(text="ℹ️ Yordam")]
+    ]
+    if uid == ADMIN_ID:
+        kb.append([KeyboardButton(text="⚙️ Admin Panel")])
+    return ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True)
 
-# --- Bot Handler funksiyalari ---
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    uid = update.effective_user.id
+# --- Handlers ---
+
+@dp.message(Command("start"))
+async def cmd_start(message: Message):
+    uid = message.from_user.id
     if uid not in db["users"]:
         db["users"].append(uid)
         save_data()
-    await update.message.reply_text("Matematika botiga xush kelibsiz!", reply_markup=main_keyboard(uid))
+    await message.answer("Matematika botiga xush kelibsiz!", reply_markup=main_keyboard(uid))
 
-async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = update.message.text
-    uid = update.effective_user.id
-    data = context.user_data
+@dp.message(F.text == "📚 Testlar")
+async def show_tests(message: Message):
+    kb = [
+        [KeyboardButton(text="🎓 DTM"), KeyboardButton(text="📜 Milliy Sertifikat")],
+        [KeyboardButton(text="🔙 Orqaga")]
+    ]
+    await message.answer("Bo'limni tanlang:", reply_markup=ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True))
 
-    if text == "🔙 Orqaga":
-        data.clear()
-        return await update.message.reply_text("🏠 Asosiy menyu", reply_markup=main_keyboard(uid))
+# Admin Panel (Faqat sizga ko'rinadi)
+@dp.message(F.text == "⚙️ Admin Panel", F.from_user.id == ADMIN_ID)
+async def admin_panel(message: Message):
+    kb = [
+        [KeyboardButton(text="➕ Test qo'shish")],
+        [KeyboardButton(text="🔙 Orqaga")]
+    ]
+    await message.answer("Admin rejimidasiz:", reply_markup=ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True))
 
-    if text == "📚 Testlar":
-        btns = [[KeyboardButton("🎓 DTM"), KeyboardButton("📜 Milliy Sertifikat")], [KeyboardButton("🔙 Orqaga")]]
-        return await update.message.reply_text("Bo'limni tanlang:", reply_markup=ReplyKeyboardMarkup(btns, resize_keyboard=True))
+@dp.message(F.text == "🔙 Orqaga")
+async def go_back(message: Message):
+    await cmd_start(message)
 
-    # Admin Panel
-    if text == "⚙️ Admin Panel" and uid == ADMIN_ID:
-        btns = [[KeyboardButton("➕ Test qo'shish")], [KeyboardButton("📋 Testlar ro'yxati")], [KeyboardButton("🔙 Orqaga")]]
-        return await update.message.reply_text("⚙️ Admin panelga xush kelibsiz:", reply_markup=ReplyKeyboardMarkup(btns, resize_keyboard=True))
-
-    if text == "➕ Test qo'shish" and uid == ADMIN_ID:
-        data["state"] = "admin_cat"
-        return await update.message.reply_text("Kategoriyani yozing (masalan: DTM):")
-
-    if data.get("state") == "admin_cat":
-        data["cat"] = text.upper()
-        data["state"] = "admin_tid"
-        return await update.message.reply_text("Test ID sini yozing (masalan: TEST01):")
-
-    if data.get("state") == "admin_tid":
-        data["tid"] = text.upper()
-        data["state"] = "admin_ans"
-        return await update.message.reply_text("To'g'ri javoblarni yuboring (masalan: abcd...):")
-
-    if data.get("state") == "admin_ans":
-        data["answers"] = re.sub(r"[^a-e]", "", text.lower())
-        data["state"] = "pdf_waiting"
-        return await update.message.reply_text("Endi ushbu testning PDF faylini yuboring:")
-
-    # Natija tekshirish
-    if text == "📊 Natijam":
-        data["state"] = "check_id"
-        return await update.message.reply_text("Tekshirmoqchi bo'lgan Test ID sini kiriting:")
-
-    if data.get("state") == "check_id":
-        tid = text.upper()
-        if tid in db["answers"]:
-            data["state"] = "waiting_ans"
-            data["check_tid"] = tid
-            return await update.message.reply_text(f"ID topildi: {tid}. Javoblaringizni yuboring:")
-        return await update.message.reply_text("Bunday ID dagi test topilmadi.")
-
-    if data.get("state") == "waiting_ans":
-        correct = db["answers"][data["check_tid"]]
-        user_ans = re.sub(r"[^a-e]", "", text.lower())
-        score = sum(1 for i in range(min(len(correct), len(user_ans))) if user_ans[i] == correct[i])
-        await update.message.reply_text(f"🏁 Test yakunlandi!\n✅ To'g'ri javoblar: {score}/{len(correct)}")
-        data.clear()
-
-async def pdf_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    data = context.user_data
-    if update.effective_user.id == ADMIN_ID and data.get("state") == "pdf_waiting":
-        tid = data["tid"]
-        db["answers"][tid] = data["answers"]
-        db["pdfs"][tid] = update.message.document.file_id
-        db["categories"][tid] = data["cat"]
-        save_data()
-        data.clear()
-        await update.message.reply_text(f"✅ Test muvaffaqiyatli saqlandi! ID: {tid}")
-
-# --- Application sozlamalari ---
-ptb_app = Application.builder().token(TOKEN).build()
-
-async def init_bot():
+# Botni ishga tushirish
+async def main():
     load_data()
-    ptb_app.add_handler(CommandHandler("start", start))
-    ptb_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_handler))
-    ptb_app.add_handler(MessageHandler(filters.Document.PDF, pdf_handler))
-    
-    await ptb_app.initialize()
-    await ptb_app.bot.set_webhook(url=f"{WEBHOOK_URL}/webhook")
-    await ptb_app.start()
-
-@flask_app.route("/webhook", methods=["POST"])
-def webhook():
-    # Asinxron jarayonni sinxron funksiya ichida ishga tushirish
-    import asyncio
-    update = Update.de_json(request.get_json(force=True), ptb_app.bot)
-    
-    # Asinxron loopni olish va yangilanishni qayta ishlash
-    loop = asyncio.get_event_loop()
-    if loop.is_running():
-        loop.create_task(ptb_app.process_update(update))
-    else:
-        loop.run_until_complete(ptb_app.process_update(update))
-        
-    return "OK", 200
-
-@flask_app.route("/")
-def index():
-    return "Bot is running online!", 200
+    print("Bot ishga tushdi...")
+    await dp.start_polling(bot)
 
 if __name__ == "__main__":
-    # 1. Botni asinxron sozlash (init_bot funksiyasini chaqirish)
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(init_bot())
-    
-    # 2. Render portini olish
-    port = int(os.environ.get("PORT", 10000))
-    
-    # 3. Flaskni ishga tushirish
-    flask_app.run(host="0.0.0.0", port=port)
+    asyncio.run(main())
