@@ -1,4 +1,2 @@
-python-telegram-bot==20.8
-flask[async]
-gunicorn==21.2.0
-httpx==0.26.0
+aiogram
+httpx
