@@ -126,13 +126,19 @@ async def init_bot():
     await ptb_app.bot.set_webhook(url=f"{WEBHOOK_URL}/webhook")
     await ptb_app.start()
 
-# Flask Webhook Route
 @flask_app.route("/webhook", methods=["POST"])
-async def webhook():
-    if not ptb_app.running:
-        await init_bot()
+def webhook():
+    # Asinxron jarayonni sinxron funksiya ichida ishga tushirish
+    import asyncio
     update = Update.de_json(request.get_json(force=True), ptb_app.bot)
-    await ptb_app.process_update(update)
+    
+    # Asinxron loopni olish va yangilanishni qayta ishlash
+    loop = asyncio.get_event_loop()
+    if loop.is_running():
+        loop.create_task(ptb_app.process_update(update))
+    else:
+        loop.run_until_complete(ptb_app.process_update(update))
+        
     return "OK", 200
 
 @flask_app.route("/")
@@ -140,7 +146,12 @@ def index():
     return "Bot is running online!", 200
 
 if __name__ == "__main__":
-    # Render avtomatik ravishda PORT muhitini beradi
+    # 1. Botni asinxron sozlash (init_bot funksiyasini chaqirish)
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(init_bot())
+    
+    # 2. Render portini olish
     port = int(os.environ.get("PORT", 10000))
-    # Flaskni asinxron ishga tushirish (yoki gunicorn ishlatish)
+    
+    # 3. Flaskni ishga tushirish
     flask_app.run(host="0.0.0.0", port=port)
